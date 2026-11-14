@@ -800,7 +800,15 @@ g2v.Deck = function(deckNumbers, midiChannel) {
         this.padsSample["pad" + ii + "shifted"] = new components.Button({
             midi    : [0x8F + midiChannel, 0x10 + ii],
             group   : "[Sampler" + ((midiChannel - 1) * 0x08 + ii) + "]",
-            key     : "eject",
+            input   : function(_channel, control, value, _status, _group) {
+                if (value !== 0x7F) { return; }
+                // Shift + pad: stop if playing, otherwise eject
+                if (engine.getValue(this.group, "play")) {
+                    engine.setValue(this.group, "play", 0);
+                } else {
+                    script.triggerControl(this.group, "eject");
+                }
+            },
         });
     }
     this.padsLoopRoll = new components.ComponentContainer();
