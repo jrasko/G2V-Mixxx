@@ -265,10 +265,18 @@ g2v.OtherControls = function() {
     this.libraryEnc = new components.Encoder({
         midi        : [0xB3, 0x1E],
         group       : "[Library]",
-        shift       : function() { this.inKey = "MoveHorizontal"; },
-        unshift     : function() { this.inKey = "MoveVertical"; },
+        shift       : function() { this.zoomMode = true; },
+        unshift     : function() { this.zoomMode = false; this.inKey = "MoveVertical"; },
         inValueScale: function(value) { return value === 0x41 ? 1 : -1; },
         input       : function(_channel, _control, value, _status, _group) {
+            if (this.zoomMode) {
+                // Shift + browse: zoom all waveforms (clockwise = zoom in)
+                var key = (this.inValueScale(value) > 0) ? "waveform_zoom_down" : "waveform_zoom_up";
+                for (var ch = 1; ch <= 2; ch++) {
+                    script.triggerControl("[Channel" + ch + "]", key);
+                }
+                return;
+            }
             this.inSetParameter(this.inValueScale(value));
         },
     });
