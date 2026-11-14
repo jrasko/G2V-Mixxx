@@ -5,8 +5,36 @@
         <author>Jannik Raskob, G4V baseline authors: Javier Vilarroig, Tilmann Glücks</author>
         <description>Gemini G2V Controller</description>
     </info>
+    <settings>
+        <group label="Button debouncing">
+            <option variable="debounceEnabled" type="boolean" default="false"
+                    label="Enable phantom-press filtering">
+                <description>
+                    Filters button chatter and pad crosstalk. Disable it for zero added latency
+                    if your unit does not produce phantom presses. Applies to all settings below.
+                </description>
+            </option>
+            <option variable="debounceMs" type="integer" min="0" max="500" step="5" default="100"
+                    label="Button debounce time (ms)">
+                <description>Ignore a press arriving sooner than this after the previous raw message of the same button. For pads it is also the time during which other pads of the same deck are ignored after a pad sent a message. Set to 0 to turn off pad crosstalk filtering (together with the pad lockout while tapping and the pad hold-back).</description>
+            </option>
+            <option variable="padBurstCrosstalkMs" type="integer" min="0" max="3000" step="50" default="1200"
+                    label="Pad crosstalk lockout while tapping (ms)">
+                <description>Longer lockout while one pad is tapped repeatedly, because ghosts keep arriving then.</description>
+            </option>
+            <option variable="padBurstMs" type="integer" min="0" max="3000" step="50" default="1500"
+                    label="Repeated-tap window (ms)">
+                <description>Taps on the same pad closer together than this count as repeated tapping and use the longer lockout.</description>
+            </option>
+            <option variable="padSettleMs" type="integer" min="0" max="200" step="5" default="70"
+                    label="Pad hold-back (ms)">
+                <description>Delay for pad presses (ghosts precede the real press by up to ~50 ms). Set to 0 for the lowest pad latency (no hold-back).</description>
+            </option>
+        </group>
+    </settings>
     <controller id="g2v">
         <scriptfiles>
+			<file filename="lodash.mixxx.js"/>
 			<file filename="midi-components-0.0.js"/>
             <file functionprefix="g2v" filename="Gemini-G2V-scripts.js"/>
         </scriptfiles>

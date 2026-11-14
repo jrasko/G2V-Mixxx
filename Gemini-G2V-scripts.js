@@ -21,6 +21,118 @@
 // eslint-disable-next-line no-var
 var g2v = {};
 
+/**
+ * Software debounce for button (note) messages.
+ * The G2V hardware chatters: a single physical press/release can send several
+ * press/release messages within a few ms to ~150 ms. For every button input we
+ *  - ignore a press that arrives less than g2v.debounceMs after the previous
+ *    raw message of the same button (sliding window, so chatter keeps being ignored),
+ *  - ignore a press while the button is already considered pressed,
+ *  - ignore a release while the button is already considered released.
+ * Pad crosstalk: the eight pads also trigger their neighbours. A press on pad B is
+ * ignored if a different pad A of the same deck sent any message less than
+ * g2v.debounceMs earlier (shifted and unshifted notes of one pad count as the same pad).
+ * Ghosts can also arrive just BEFORE the real press, so pad presses are held back
+ * g2v.padSettleMs; if a different pad presses within that time, the later press wins.
+ * Side effects: pad presses are delayed by g2v.padSettleMs, and two different pads
+ * pressed within the window count only as one (the later).
+ * While a pad is tapped repeatedly the lockout is longer (g2v.padBurstCrosstalkMs).
+ * Releases are never delayed or blocked while the button is down, so buttons can't get stuck.
+ * Continuous controls (CC messages: pots, encoders, jog wheel) are passed through untouched.
+ * Raise g2v.debounceMs if you still see double triggers, lower it if fast taps are dropped.
+ **/
+g2v.debounceEnabled = engine.getSetting("debounceEnabled") ?? false; // set in Mixxx controller preferences
+g2v.debounceMs = Number(engine.getSetting("debounceMs") ?? 100); // also the lockout for other pads after a pad's last message
+// Pad timings, all set in Mixxx controller preferences.
+g2v.padBurstCrosstalkMs = Number(engine.getSetting("padBurstCrosstalkMs") ?? 1200); // longer lockout while a pad is being tapped repeatedly (ghosts keep coming for a while there)
+g2v.padBurstMs = Number(engine.getSetting("padBurstMs") ?? 1500);                   // taps closer together than this on one pad count as repeated tapping
+g2v.padSettleMs = Number(engine.getSetting("padSettleMs") ?? 70);                   // hold-back for pad presses (0 = fire immediately; ghosts precede the real press by up to ~50 ms)
+g2v.pendingPad = {};     // per deck: press waiting to be confirmed
+g2v.lastPadEvent = {};   // per deck (MIDI status byte): {pad, time}
+
+g2v.debounceComponent = function(component) {
+    var originalInput = component.input;
+    var lastEvent = {};
+    var isDown = {};
+    component.input = function(channel, control, value, status, group) {
+        var type = status & 0xF0;
+        if (type !== 0x90 && type !== 0x80) {
+            return originalInput.apply(this, arguments);
+        }
+        var self = this;
+        var args = arguments;
+        var id = status + ":" + control;
+        var now = Date.now();
+        var previous = lastEvent[id];
+        lastEvent[id] = now;
+        var isPad = control >= 0x09 && control <= 0x18;
+        var pad = (control - 0x09) & 0x07;
+        var lastPad = g2v.lastPadEvent[status];
+        if (isPad && lastPad !== undefined && lastPad.pad === pad) { lastPad.time = now; }
+
+        if (type === 0x90 && value > 0) {
+            if (isDown[id] || (previous !== undefined && now - previous < g2v.debounceMs)) { return; }
+            if (isPad) {
+                if (lastPad !== undefined && lastPad.pad !== pad) {
+                    var lockout = (lastPad.taps >= 2) ? g2v.padBurstCrosstalkMs : g2v.debounceMs;
+                    if (now - lastPad.time < lockout) { return; }
+                }
+                if (g2v.padSettleMs > 0) {
+                    // Hold the press back briefly. If another pad presses in the meantime,
+                    // the earlier one was the ghost: drop it, the newer press wins.
+                    var pending = g2v.pendingPad[status];
+                    if (pending !== undefined) { engine.stopTimer(pending.timer); }
+                    var entry = {id: id};
+                    entry.fire = function() {
+                        g2v.pendingPad[status] = undefined;
+                        var fired = Date.now();
+                        var before = g2v.lastPadEvent[status];
+                        var taps = (before !== undefined && before.pad === pad && fired - before.fired < g2v.padBurstMs) ? before.taps + 1 : 1;
+                        g2v.lastPadEvent[status] = {pad: pad, time: fired, fired: fired, taps: taps};
+                        isDown[id] = true;
+                        originalInput.apply(self, args);
+                        if (entry.releaseArgs !== undefined) {
+                            isDown[id] = false;
+                            originalInput.apply(self, entry.releaseArgs);
+                        }
+                    };
+                    entry.timer = engine.beginTimer(g2v.padSettleMs, entry.fire, true);
+                    g2v.pendingPad[status] = entry;
+                    return;
+                }
+                g2v.lastPadEvent[status] = {pad: pad, time: now};
+            }
+            isDown[id] = true;
+        } else {
+            var held = g2v.pendingPad[status];
+            if (isPad && held !== undefined && held.id === id) {
+                // released while the press is still on hold: send the release together with the press
+                held.releaseArgs = args;
+                return;
+            }
+            if (!isDown[id]) { return; }
+            isDown[id] = false;
+        }
+        return originalInput.apply(self, args);
+    };
+    component.debounced = true;
+};
+
+g2v.debounceAll = function(container) {
+    if (container.debounceVisited) { return; }
+    container.debounceVisited = true;
+    for (var key in container) {
+        if (key === "jogWheel" || key === "deck") { continue; }
+        var item = container[key];
+        if (item === null || typeof item !== "object") { continue; }
+        if (item instanceof components.ComponentContainer) {
+            g2v.debounceAll(item);
+        } else if (item instanceof components.Component && !item.debounced && typeof item.input === "function") {
+            g2v.debounceComponent(item);
+        }
+    }
+};
+
 g2v.init = function() {
     g2v.otherControls   = new g2v.OtherControls();
     g2v.deck1Mixer      = new g2v.MixerStrip(1);
@@ -32,6 +144,10 @@ g2v.init = function() {
     g2v.flashState      = false;
     
     g2v.timer === 0 ? print("Failed to start flash timer!") : print("Flash timer started!");
+
+    if (g2v.debounceEnabled) {
+        [g2v.otherControls, g2v.deck1Mixer, g2v.deck2Mixer, g2v.leftDeck, g2v.rightDeck].forEach(g2v.debounceAll);
+    }
 
     g2v.leftDeck.padMode(g2v.Deck.prototype.modes.cue);
     g2v.rightDeck.padMode(g2v.Deck.prototype.modes.cue);
@@ -809,6 +925,14 @@ g2v.Deck = function(deckNumbers, midiChannel) {
     });
     this.playBtn = new components.PlayButton([0x8F + midiChannel, 0x01]);
     this.syncBtn = new components.SyncButton([0x8F + midiChannel, 0x04]);
+
+    // Manual loop mode has no shifted functions; add no-op buttons so shifted pad presses don't hit an undefined control
+    for (var ii = 1; ii <= 8; ii++) {
+        this.padsManualLoop["pad" + ii + "shifted"] = new components.Button({
+            midi    : [0x8F + midiChannel, 0x10 + ii],
+            group   : "[Channel" + midiChannel + "]",
+        });
+    }
 
     this.reconnectComponents(function(c) {
         if (c.group === undefined) {
