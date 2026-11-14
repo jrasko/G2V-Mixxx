@@ -489,6 +489,14 @@ g2v.Deck = function(deckNumbers, midiChannel) {
             this.pads.shutdown();
         }
 
+        // Only the active mode may drive the pad LEDs: disconnect the outputs of all
+        // pad containers (the deck constructor connected every one of them)
+        var allPads = [this.padsCue, this.padsLoop, this.padsSample, this.padsLoopRoll,
+            this.padsBeatjump, this.padsUnused1, this.padsUnused2, this.padsManualLoop];
+        allPads.forEach(function(container) {
+            container.forEachComponent(function(component) { component.disconnect(); });
+        });
+
         switch (mode) {
         case g2v.Deck.prototype.modes.cue:
             this.pads = this.padsCue;
