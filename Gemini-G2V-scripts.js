@@ -879,7 +879,6 @@ g2v.Deck = function(deckNumbers, midiChannel) {
             group   : "[Channel" + midiChannel + "]",
             inKey   : "reloop_toggle",
             outKey  : "loop_enabled",
-            type    : components.Button.prototype.types.toggle,
         }),
         pad4unshifted: new components.Button({
             midi    : [0x8F + midiChannel, 0x0C],
