@@ -1,5 +1,5 @@
 /**
- * Gemini G4V controller script v2.0
+ * Gemini G2V controller script v2.0
  * For Mixxx 2.3.0+
  * Originally Written by Ryan Belt 2016
  * Modifications done by Javier VIlarroig 2017
@@ -19,26 +19,24 @@
  //very optional: Library button + encoder: add full preview functionality from old mapping
  
 // eslint-disable-next-line no-var
-var g4v = {};
+var g2v = {};
 
-g4v.init = function() {
-    g4v.otherControls   = new g4v.OtherControls();
-    g4v.deck1Mixer      = new g4v.MixerStrip(1);
-    g4v.deck2Mixer      = new g4v.MixerStrip(2);
-    g4v.deck3Mixer      = new g4v.MixerStrip(3);
-    g4v.deck4Mixer      = new g4v.MixerStrip(4);
-    g4v.leftDeck        = new g4v.Deck([1, 3], 1);
-    g4v.rightDeck       = new g4v.Deck([2, 4], 2);
+g2v.init = function() {
+    g2v.otherControls   = new g2v.OtherControls();
+    g2v.deck1Mixer      = new g2v.MixerStrip(1);
+    g2v.deck2Mixer      = new g2v.MixerStrip(2);
+    g2v.leftDeck        = new g2v.Deck([1], 1);
+    g2v.rightDeck       = new g2v.Deck([2], 2);
     
-    g4v.timer           = engine.beginTimer(500, "g4v.flash()");
-    g4v.flashState      = false;
+    g2v.timer           = engine.beginTimer(500, "g2v.flash()");
+    g2v.flashState      = false;
     
-    g4v.timer === 0 ? print("Failed to start flash timer!") : print("Flash timer started!");
+    g2v.timer === 0 ? print("Failed to start flash timer!") : print("Flash timer started!");
 
-    g4v.leftDeck.padMode(g4v.Deck.prototype.modes.cue);
-    g4v.rightDeck.padMode(g4v.Deck.prototype.modes.cue);
+    g2v.leftDeck.padMode(g2v.Deck.prototype.modes.cue);
+    g2v.rightDeck.padMode(g2v.Deck.prototype.modes.cue);
   
-    for (var ii = 1; ii <= 4; ii++) {
+    for (var ii = 1; ii <= 2; ii++) {
         engine.softTakeover("[Channel" + ii + "]",                  "rate",     true);
         engine.softTakeover("[Channel" + ii + "]",                  "pitch",    true);
         engine.softTakeover("[EffectRack1_EffectUnit" + ii + "]",   "mix",      true);
@@ -46,20 +44,17 @@ g4v.init = function() {
     }
 };
 
-g4v.shutdown = function()  {
-    g4v.otherControls.shutdown();
+g2v.shutdown = function()  {
+    g2v.otherControls.shutdown();
     
-    g4v.deck1Mixer.shutdown();
-    g4v.deck1Mixer.shutdown();
-    g4v.deck2Mixer.shutdown();
-    g4v.deck3Mixer.shutdown();
-    g4v.deck4Mixer.shutdown();
+    g2v.deck1Mixer.shutdown();
+    g2v.deck2Mixer.shutdown();
     
-    g4v.leftDeck.shutdown();
-    g4v.rightDeck.shutdown();
+    g2v.leftDeck.shutdown();
+    g2v.rightDeck.shutdown();
     
-    if (g4v.timer != 0){
-        engine.stopTimer(g4v.timer);
+    if (g2v.timer != 0){
+        engine.stopTimer(g2v.timer);
     };
 	
     // Switch off leds not connected to controls
@@ -67,22 +62,20 @@ g4v.shutdown = function()  {
     midi.sendShortMsg(0x90, 0x1C, 0x00);	// Left Auto Loop pad mode select button
     midi.sendShortMsg(0x90, 0x1D, 0x00);	// Left Sample pad mode select button
     midi.sendShortMsg(0x90, 0x1E, 0x00);	// Left Loop Roll pad mode select button
-    midi.sendShortMsg(0x90, 0x26, 0x00);	// Left Deck select button
     midi.sendShortMsg(0x91, 0x1B, 0x00);	// Right HotCue pad mode select button
     midi.sendShortMsg(0x91, 0x1C, 0x00);	// Right Auto Loop pad mode select button
     midi.sendShortMsg(0x91, 0x1D, 0x00);	// Right Sample pad mode select button
     midi.sendShortMsg(0x91, 0x1E, 0x00);	// Right Loop Roll pad mode select button
-    midi.sendShortMsg(0x91, 0x26, 0x00);	// Right Deck select button
 };
 
-g4v.flash = function() {
-    g4v.flashState = !g4v.flashState;
+g2v.flash = function() {
+    g2v.flashState = !g2v.flashState;
     
-    g4v.leftDeck.flash(g4v.flashState);
-    g4v.rightDeck.flash(g4v.flashState);
+    g2v.leftDeck.flash(g2v.flashState);
+    g2v.rightDeck.flash(g2v.flashState);
 };
 
-g4v.MixerStrip = function(deckNumber) {
+g2v.MixerStrip = function(deckNumber) {
     this.loadBtn = new components.Button({
         midi    : [0x93, 0x00 + deckNumber],
         group   : "[Channel" + deckNumber + "]",
@@ -136,49 +129,11 @@ g4v.MixerStrip = function(deckNumber) {
         group   : "[Channel" + deckNumber +"]",
         inKey   : "volume",
     });
-    this.orientationLeftBtn = new components.Button({
-        midi    : [0x93, 0x04 + deckNumber],
-        group   : "[Channel" + deckNumber +"]",
-        key     : "orientation",
-		shift   : function() {
-			this.input = function(_channel, _control, value, _status, _group) {
-				if (!value) { return; }
-				this.inSetValue(this.inGetValue() !== 0 ? 0 : 1);
-			};
-		},
-		unshift: function() {
-			this.input = function(_channel, _control, value, _status, _group) {
-				;
-			};
-		},
-        output: function(value, _group, _control) {
-            this.send(value === 0 ? this.on : this.off);
-        },
-    });
-    this.orientationRightBtn = new components.Button({
-        midi    : [0x93, 0x08 + deckNumber],
-        group   : "[Channel" + deckNumber +"]",
-        key     : "orientation",
-		shift   : function() {
-			this.input = function(_channel, _control, value, _status, _group) {
-				if (!value) { return; }
-				this.inSetValue(this.inGetValue() !== 2 ? 2 : 1);
-			};
-		},
-		unshift : function() {
-			this.input = function(_channel, _control, value, _status, _group) {
-				;
-			};
-		},
-        output  : function(value, _group, _control) {
-            this.send(value === 2 ? this.on : this.off);
-        },
-    });
 };
-g4v.MixerStrip.prototype = new components.ComponentContainer();
+g2v.MixerStrip.prototype = new components.ComponentContainer();
 
 
-g4v.OtherControls = function() {
+g2v.OtherControls = function() {
     components.ComponentContainer.call();
     
     this.libraryBtn = new components.Button({
@@ -250,29 +205,25 @@ g4v.OtherControls = function() {
     this.shiftBtn = new components.Component({
         input: function(_channel, _control, value, _status, _group) {
             if (value === 0x7F) {
-                g4v.otherControls.shift();
-                g4v.deck1Mixer.shift();
-                g4v.deck2Mixer.shift();
-                g4v.deck3Mixer.shift();
-                g4v.deck4Mixer.shift();
-                g4v.leftDeck.shift();
-                g4v.rightDeck.shift();
+                g2v.otherControls.shift();
+                g2v.deck1Mixer.shift();
+                g2v.deck2Mixer.shift();
+                g2v.leftDeck.shift();
+                g2v.rightDeck.shift();
             } else {
-                g4v.otherControls.unshift();
-                g4v.deck1Mixer.unshift();
-                g4v.deck2Mixer.unshift();
-                g4v.deck3Mixer.unshift();
-                g4v.deck4Mixer.unshift();
-                g4v.leftDeck.unshift();
-                g4v.rightDeck.unshift();
+                g2v.otherControls.unshift();
+                g2v.deck1Mixer.unshift();
+                g2v.deck2Mixer.unshift();
+                g2v.leftDeck.unshift();
+                g2v.rightDeck.unshift();
             }
         },
     });
     this.reconnectComponents();
 };
-g4v.OtherControls.prototype = new components.ComponentContainer();
+g2v.OtherControls.prototype = new components.ComponentContainer();
 
-g4v.Deck = function(deckNumbers, midiChannel) {
+g2v.Deck = function(deckNumbers, midiChannel) {
     components.Deck.call(this, deckNumbers);
     
     var theDeck = this; //I don't (yet) understand why i have to use this to access some elements like wheelMode, but using it anyway...
@@ -326,8 +277,6 @@ g4v.Deck = function(deckNumbers, midiChannel) {
     this.tempoPot = new components.Pot({
         midi            : [0x8F + midiChannel, 0x01],
         inKey           : "rate",
-        //shift           : function() { this.inKey = "pitch"; },
-        //unshift         : function() { this.inKey = "rate"; },
         invert          : 1,
         inValueScale    : function(value) {
             if (value === 0x3F) {return 0.5;}
@@ -337,7 +286,7 @@ g4v.Deck = function(deckNumbers, midiChannel) {
     
     this.flash = function(fState) {
         switch (this.patMode) {
-            case g4v.Deck.prototype.modes.autoLoop:
+            case g2v.Deck.prototype.modes.autoLoop:
                 if (engine.getParameter("[Channel" + script.deckFromGroup(this.currentDeck) + "]", "beatloop_32_enabled") === 1) {
                     midi.sendShortMsg(0x8F + midiChannel, 0x08 + 1, (fState ? 0x7F : 0x00));
                     midi.sendShortMsg(0x8F + midiChannel, 0x08 + 2, 0x00);
@@ -389,16 +338,16 @@ g4v.Deck = function(deckNumbers, midiChannel) {
                     midi.sendShortMsg(0x8F + midiChannel, 0x08 + 8, 0x00);
                 };
                 break;
-            case g4v.Deck.prototype.modes.unused1:
+            case g2v.Deck.prototype.modes.unused1:
                 midi.sendShortMsg(0x8F + midiChannel, 0x1B, (fState ? 0x7F : 0x00));
                 break;
-            case g4v.Deck.prototype.modes.unused2:
+            case g2v.Deck.prototype.modes.unused2:
                 midi.sendShortMsg(0x8F + midiChannel, 0x1C, (fState ? 0x7F : 0x00));
                 break;
-            case g4v.Deck.prototype.modes.beatJump:
+            case g2v.Deck.prototype.modes.beatJump:
                 midi.sendShortMsg(0x8F + midiChannel, 0x1D, (fState ? 0x7F : 0x00));
                 break;
-            case g4v.Deck.prototype.modes.manualLoop:
+            case g2v.Deck.prototype.modes.manualLoop:
                 midi.sendShortMsg(0x8F + midiChannel, 0x1E, (fState ? 0x7F : 0x00));
                 break;
         }
@@ -417,32 +366,32 @@ g4v.Deck = function(deckNumbers, midiChannel) {
         }
 
         switch (mode) {
-        case g4v.Deck.prototype.modes.cue:
+        case g2v.Deck.prototype.modes.cue:
             this.pads = this.padsCue;
             midi.sendShortMsg(0x8F + midiChannel, 0x1A + mode, 0x7F);
             break;
-        case g4v.Deck.prototype.modes.autoLoop:
+        case g2v.Deck.prototype.modes.autoLoop:
             this.pads = this.padsLoop;
             midi.sendShortMsg(0x8F + midiChannel, 0x1A + mode, 0x7F);
             break;
-        case g4v.Deck.prototype.modes.sample:
+        case g2v.Deck.prototype.modes.sample:
             this.pads = this.padsSample;
             midi.sendShortMsg(0x8F + midiChannel, 0x1A + mode, 0x7F);
             break;
-        case g4v.Deck.prototype.modes.loopRoll:
+        case g2v.Deck.prototype.modes.loopRoll:
             this.pads = this.padsLoopRoll;
             midi.sendShortMsg(0x8F + midiChannel, 0x1A + mode, 0x7F);
             break;
-        case g4v.Deck.prototype.modes.unused1:
+        case g2v.Deck.prototype.modes.unused1:
             this.pads = this.padsUnused1;
             break;
-        case g4v.Deck.prototype.modes.unused2:
+        case g2v.Deck.prototype.modes.unused2:
             this.pads = this.padsUnused2;
             break;
-        case g4v.Deck.prototype.modes.beatJump:
+        case g2v.Deck.prototype.modes.beatJump:
             this.pads = this.padsBeatjump;
             break;
-        case g4v.Deck.prototype.modes.manualLoop:
+        case g2v.Deck.prototype.modes.manualLoop:
             this.pads = this.padsManualLoop;
             break;
         }
@@ -470,13 +419,6 @@ g4v.Deck = function(deckNumbers, midiChannel) {
             inKey   : "hotcue_" + ii + "_clear",
         });
     } 
-    for (var ii = 1; ii <= 8; ii++) {
-        this.padsCue["pad" + ii + "shifted"] = new components.Button({
-            midi    : [0x8F + midiChannel, 0x10 + ii],
-            group   : "[Channel" + midiChannel + "]",
-            inKey   : "hotcue_" + ii + "_clear",
-        });
-    };
     this.padsLoop = new components.ComponentContainer();
     this.padsLoop["pad1unshifted"] = new components.Component({
         midi    : [0x8F + midiChannel, 0x08 + 1],
@@ -715,22 +657,6 @@ g4v.Deck = function(deckNumbers, midiChannel) {
             midi.sendShortMsg(0x8F + midiChannel, 0x08 + 8, 0x00);
         },
     });
-    /*
-    for (var ii = 1; ii <= 8; ii++) {
-        this.padsLoop["pad" + ii + "unshifted"] = new components.Button({
-            midi    : [0x8F + midiChannel, 0x08 + ii],
-            group   : "[Channel" + midiChannel + "]",
-            inKey   : "beatloop_" + (0.125 * Math.pow(2, ii - 1)) + "_toggle",
-            //outKey  : "beatloop_" + (0.125 * Math.pow(2, ii- 1)) + "_enabled",
-        });
-        this.padsLoop["pad" + ii + "shifted"] = new components.Button({
-            midi    : [0x8F + midiChannel, 0x10 + ii],
-            group   : "[Channel" + midiChannel + "]",
-            inKey   : "beatloop_" + (0.125 * Math.pow(2, ii + 8 - 1)) + "_toggle",
-            //outKey  : "beatloop_" + (0.125 * Math.pow(2, ii + 8 - 1)) + "_enabled",
-        });
-    }
-    */
     this.padsSample = new components.ComponentContainer();
     for (var ii = 1; ii <= 8; ii++) {
         this.padsSample["pad" + ii + "unshifted"] = new components.Button({
@@ -847,32 +773,6 @@ g4v.Deck = function(deckNumbers, midiChannel) {
         }),
     });
     
-    this.deckToggleBtn = new components.Component({
-        deck    : this,
-        input   : function(_channel, _control, value, _status, _group) {
-            if (!value) { return; }
-            
-            this.deck.toggle();           
-            
-            if (script.deckFromGroup(this.deck.currentDeck) > 2) {
-                midi.sendShortMsg(0x8F + midiChannel, 0x26, 0x7F)
-            } else {
-                midi.sendShortMsg(0x8F + midiChannel, 0x26, 0x00);
-            };
-            
-            //prepare for soft takeover
-            engine.softTakeoverIgnoreNextValue("[Channel" + script.deckFromGroup(this.deck.currentDeck) + "]", "rate");
-            engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit" + script.deckFromGroup(this.deck.currentDeck) + "]", "super1");
-            engine.softTakeoverIgnoreNextValue("[EffectRack1_EffectUnit" + script.deckFromGroup(this.deck.currentDeck) + "]", "mix");
-            
-            this.deck.fxOnOffBtn.group  = "[EffectRack1_EffectUnit" + script.deckFromGroup(this.deck.currentDeck) + "]";
-            this.deck.fxOnOffBtn.inKey  = "group_" + this.deck.currentDeck + "_enable";
-            this.deck.fxPot1.group      = "[EffectRack1_EffectUnit" + script.deckFromGroup(this.deck.currentDeck) + "]";
-            this.deck.fxPot2.group      = "[EffectRack1_EffectUnit" + script.deckFromGroup(this.deck.currentDeck) + "]";
-            this.deck.jogWheel.deck     = script.deckFromGroup(this.deck.currentDeck);
-        },
-    });
-    
     this.wheelModeBtn = new components.Button({
         midi    : [0x8F + midiChannel, 0x23],
         group   : "[Channel" + midiChannel + "]",
@@ -916,8 +816,8 @@ g4v.Deck = function(deckNumbers, midiChannel) {
         }
     });
 };
-g4v.Deck.prototype = new components.Deck();
-g4v.Deck.prototype.modes = {
+g2v.Deck.prototype = new components.Deck();
+g2v.Deck.prototype.modes = {
     cue         : 1,
     autoLoop    : 2,
     sample      : 3,
